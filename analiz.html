@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>El Captein V5 - Özet Raporlayıcı</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; background: #f8fafc; }
+        .glass { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); }
+    </style>
+</head>
+<body class="p-6">
+
+    <div class="max-w-3xl mx-auto mt-10">
+        <div class="bg-slate-900 rounded-[2.5rem] p-10 shadow-2xl text-white border border-slate-700">
+            <h1 class="text-3xl font-black tracking-tight mb-2">📊 ANALİZ SİSTEMİ <span class="text-emerald-400 text-sm font-normal">v5.0</span></h1>
+            <p class="text-slate-400 text-sm mb-8 italic">Öğretmen bazlı özet ders dağılım raporu oluşturucu</p>
+            
+            <div class="bg-slate-800 rounded-2xl p-6 border border-slate-700 mb-6">
+                <input type="file" id="dosya" accept=".xlsx" class="text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-500 file:text-white hover:file:bg-emerald-400 cursor-pointer w-full"/>
+            </div>
+
+            <button onclick="raporOlustur()" class="w-full bg-indigo-600 hover:bg-indigo-500 py-5 rounded-2xl font-black uppercase tracking-tighter shadow-lg transition-all active:scale-95">
+                Raporu Analiz Et ve Excel'i İndir
+            </button>
+        </div>
+        <div id="bilgi" class="mt-6 text-center text-slate-500 font-medium"></div>
+    </div>
+
+    <script>
+        const gunler = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma"];
+
+        async function raporOlustur() {
+            const input = document.getElementById('dosya');
+            if(!input.files[0]) return alert("Dosya seçiniz!");
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const wb = XLSX.read(data, {type: 'array'});
+                
+                const ogSheet = wb.Sheets["Öğretmen Programları"];
+                const snSheet = wb.Sheets["Sınıf Programları"];
+                
+                const ogRows = XLSX.utils.sheet_to_json(ogSheet, {header: 1});
+                const snRows = snSheet ? XLSX.utils.sheet_to_json(snSheet, {header: 1}) : [];
+
+                let hocaVerileri = {};
+                let genelDersOzetSet = new Set(); // Tekilleştirme için Set kullanıyoruz
+
+                let aktifHoca = null;
+
+                // VERİLERİ TARA VE ANALİZ ET
+                ogRows.forEach(row => {
+                    if(!row || row.length === 0) return;
+                    let ilk = String(row[0]);
+
+                    if(ilk.includes("(") && !ilk.includes("SAAT")) {
+                        aktifHoca = ilk.split("(")[0].trim();
+                        hocaVerileri[aktifHoca] = {
+                            full: ilk,
+                            program: [["SAAT", ...gunler]],
+                            saatSayisi: 0
+                        };
+                    } else if(aktifHoca && !isNaN(parseInt(ilk)) && parseInt(ilk) < 12) {
+                        hocaVerileri[aktifHoca].program.push(row);
+                        for(let i=1; i<=5; i++) {
+                            if(row[i] && row[i] !== "-") {
+                                hocaVerileri[aktifHoca].saatSayisi++;
+                                // "Hoca - Sınıf - Ders" kombinasyonunu tekilleştir
+                                const parca = row[i].split(" - ");
+                                const sinif = parca[0] || "?";
+                                const ders = parca[1] || "?";
+                                genelDersOzetSet.add(`${aktifHoca}|${sinif}|${ders}`);
+                            }
+                        }
+                    }
+                });
+
+                // Set'i tabloya dönüştür
+                let ozetTablo = [["ÖĞRETMEN ADI", "SINIF", "DERS"]];
+                Array.from(genelDersOzetSet).sort().forEach(item => {
+                    ozetTablo.push(item.split("|"));
+                });
+
+                excelDosyaHazirla(snRows, hocaVerileri, ozetTablo);
+            };
+            reader.readAsArrayBuffer(input.files[0]);
+        }
+
+        function excelDosyaHazirla(snRows, hocaData, ozetTablo) {
+            const outWb = XLSX.utils.book_new();
+
+            // 1. Sınıf Programları (Olduğu gibi)
+            XLSX.utils.book_append_sheet(outWb, XLSX.utils.aoa_to_sheet(snRows), "SINIF PROGRAMLARI");
+
+            // 2. Her Öğretmen Sekmesi
+            Object.keys(hocaData).sort().forEach(hAd => {
+                const h = hocaData[hAd];
+                const maas = 15;
+                const ekders = Math.max(0, h.saatSayisi - maas);
+
+                const sheetContent = [
+                    [h.full],
+                    ["TOPLAM DERS:", h.saatSayisi, "MAAŞ:", maas, "EK DERS:", ekders],
+                    [],
+                    ["📅 HAFTALIK PROGRAM"],
+                    ...h.program,
+                    [],
+                    ["---------------------------------------------------"],
+                    ["📢 OKUL GENELİ DERS DAĞILIM LİSTESİ (ÖZET)"],
+                    ["(Hangi öğretmen hangi sınıfa giriyor?)"],
+                    [],
+                    ...ozetTablo // TEKRARSIZ ÖZET LİSTE
+                ];
+
+                const ws = XLSX.utils.aoa_to_sheet(sheetContent);
+                const safeName = hAd.replace(/[\\*?:/\[\]]/g, "").substring(0, 31);
+                XLSX.utils.book_append_sheet(outWb, ws, safeName);
+            });
+
+            XLSX.writeFile(outWb, "Program_Analiz_Raporu_Ozet.xlsx");
+            document.getElementById('bilgi').innerText = "✅ Rapor Hazır!";
+        }
+    </script>
+</body>
+</html>
