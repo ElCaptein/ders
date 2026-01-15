@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RIZA KARAMAN V16 - PRO ARCHITECT</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .nav-btn.active { background: #4f46e5; color: white; box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.4); }
+        .card { background: white; border-radius: 1.5rem; border: 1px solid #e2e8f0; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .hour-cell { min-height: 75px; border: 1px solid #e2e8f0; display: flex; flex-direction: column; justify-content: center; align-items: center; border-radius: 12px; font-size: 10px; margin: 2px; cursor: grab; background: white; transition: all 0.2s; position: relative; }
+        .hour-cell:hover { transform: translateY(-2px); border-color: #4f46e5; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .hour-cell.drag-over { background: #eef2ff; border: 2px dashed #4f46e5; }
+        .m-box { width: 100%; aspect-ratio: 1; border-radius: 6px; border: 1px solid #e2e8f0; cursor: pointer; transition: 0.2s; }
+        .m-box.active { background: #ef4444; border-color: #b91c1c; }
+        .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.8); align-items: center; justify-content: center; backdrop-filter: blur(8px); }
+        .delete-btn { position: absolute; top: 4px; right: 4px; background: #fee2e2; color: #ef4444; border-radius: 50%; width: 20px; height: 20px; display: none; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; cursor: pointer; }
+        .hour-cell:hover .delete-btn { display: flex; }
+    </style>
+</head>
+<body class="p-4 lg:p-8">
+
+    <div id="manualModal" class="modal">
+        <div class="bg-white p-8 rounded-[2rem] shadow-2xl w-[450px] border border-slate-100">
+            <h3 class="font-black text-xl mb-1 uppercase italic text-slate-800">Hücre Düzenle</h3>
+            <p id="modalInfo" class="text-[10px] font-bold text-indigo-600 mb-6 bg-indigo-50 p-3 rounded-xl border border-indigo-100 uppercase"></p>
+            <div class="space-y-4">
+                <div>
+                    <label class="text-[10px] font-black text-slate-400 uppercase ml-1">Ders Seçimi</label>
+                    <select id="mDers" class="w-full p-4 border rounded-2xl font-bold text-sm bg-slate-50 mt-1 focus:ring-2 ring-indigo-500 outline-none" onchange="updateHocaList()"></select>
+                </div>
+                <div>
+                    <label class="text-[10px] font-black text-slate-400 uppercase ml-1">Öğretmen Seçimi</label>
+                    <select id="mHoca" class="w-full p-4 border rounded-2xl font-bold text-sm bg-slate-50 mt-1 focus:ring-2 ring-indigo-500 outline-none"></select>
+                </div>
+            </div>
+            <div class="flex gap-3 mt-8">
+                <button onclick="closeModal()" class="flex-1 bg-slate-100 py-4 rounded-2xl font-black text-[11px] uppercase text-slate-500 hover:bg-slate-200 transition">İPTAL</button>
+                <button onclick="saveManualEntry()" class="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black text-[11px] uppercase shadow-lg hover:bg-indigo-700 transition">KAYDET</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-[1700px] mx-auto">
+        <header class="flex flex-col lg:flex-row justify-between items-center mb-10 gap-6">
+            <div>
+                <h1 class="text-3xl font-black text-slate-900 italic leading-none">RIZA KARAMAN <span class="text-indigo-600">V16</span></h1>
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-2">Professional School Management System</p>
+            </div>
+            <div class="flex flex-wrap gap-3">
+                <input type="file" id="xlInp" class="hidden" onchange="excelYukle(event)">
+                <button onclick="document.getElementById('xlInp').click()" class="bg-white border-2 border-slate-200 px-6 py-3 rounded-2xl font-black text-[10px] uppercase hover:border-indigo-500 transition">📥 YEDEK YÜKLE</button>
+                <button onclick="sistemiYedekle()" class="bg-slate-900 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase hover:bg-slate-800 transition shadow-xl">💾 SİSTEMİ YEDEKLE</button>
+                <button onclick="v3FormatExcelAl()" class="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition">📊 EXCEL ÇIKTISI AL</button>
+            </div>
+        </header>
+
+        <nav class="flex p-1.5 bg-slate-200/50 rounded-[2rem] gap-1 mb-8">
+            <button onclick="tabAc('t-setup', this)" class="nav-btn active flex-1 py-4 rounded-[1.5rem] font-black text-[10px] uppercase transition-all">1. VERİ TANIMLAMALARI</button>
+            <button onclick="tabAc('t-analiz', this)" class="nav-btn flex-1 py-4 rounded-[1.5rem] font-black text-[10px] uppercase transition-all">2. SINIF PROGRAMLARI</button>
+            <button onclick="tabAc('t-ogretmen', this)" class="nav-btn flex-1 py-4 rounded-[1.5rem] font-black text-[10px] uppercase transition-all">3. ÖĞRETMEN ÇİZELGELERİ</button>
+        </nav>
+
+        <div id="t-setup" class="tab-content active grid grid-cols-1 xl:grid-cols-12 gap-8">
+            <div class="xl:col-span-3 space-y-6">
+                <div class="card border-t-4 border-indigo-500">
+                    <h3 class="font-black text-xs text-indigo-600 mb-4 uppercase italic">Zümre & Branş</h3>
+                    <input type="text" id="zmAd" placeholder="ZÜMRE ADI (örn: MATEMATİK)" class="w-full p-3 mb-2 border rounded-xl text-xs font-bold uppercase outline-none focus:ring-2 ring-indigo-500/20">
+                    <input type="text" id="zmDs" placeholder="DERSLER (örn: MAT, GEO)" class="w-full p-3 mb-4 border rounded-xl text-xs font-bold uppercase outline-none focus:ring-2 ring-indigo-500/20">
+                    <button onclick="ekleZ()" class="w-full bg-slate-900 text-white py-3 rounded-xl font-black text-[10px] uppercase hover:bg-indigo-600 transition">LİSTEYE EKLE</button>
+                    <div id="listZ" class="mt-6 space-y-2"></div>
+                </div>
+                <div class="card border-t-4 border-amber-500">
+                    <h3 class="font-black text-xs text-amber-600 mb-4 uppercase italic">Sınıf Tanımlama</h3>
+                    <input type="text" id="snAd" placeholder="SINIF ADI (örn: 9-A)" class="w-full p-3 mb-2 border rounded-xl text-xs font-bold uppercase outline-none focus:ring-2 ring-amber-500/20">
+                    <input type="text" id="snDs" placeholder="DERS:SAAT (örn: MAT:6, GEO:2)" class="w-full p-3 mb-4 border rounded-xl text-xs font-bold uppercase outline-none focus:ring-2 ring-amber-500/20">
+                    <button onclick="ekleS()" class="w-full bg-slate-900 text-white py-3 rounded-xl font-black text-[10px] uppercase hover:bg-amber-600 transition">LİSTEYE EKLE</button>
+                    <div id="listS" class="mt-6 space-y-2"></div>
+                </div>
+            </div>
+
+            <div class="xl:col-span-9">
+                <div class="card bg-white border-t-4 border-emerald-500">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                        <div class="space-y-4">
+                            <h3 class="font-black text-xs text-emerald-600 mb-2 uppercase italic">Öğretmen Kartı</h3>
+                            <input type="text" id="ogAd" placeholder="AD SOYAD" class="w-full p-4 border rounded-2xl font-bold uppercase text-sm outline-none focus:ring-2 ring-emerald-500/20">
+                            <div class="grid grid-cols-2 gap-3">
+                                <select id="ogZm" class="p-4 border rounded-2xl font-bold text-[11px] uppercase bg-slate-50"></select>
+                                <select id="ogBlok" class="p-4 border rounded-2xl font-black text-[11px] uppercase bg-indigo-50 text-indigo-700 border-indigo-100">
+                                    <option value="BLOK">Paket: BLOK (2+2)</option>
+                                    <option value="ESNEK">Paket: ESNEK (2+1)</option>
+                                    <option value="TEK">Paket: TEK (1+1)</option>
+                                </select>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="bg-slate-50 p-3 rounded-2xl border">
+                                    <label class="text-[9px] font-black text-slate-400 uppercase block mb-1">Maaş Karşılığı</label>
+                                    <input type="number" id="ogMaas" value="15" class="w-full bg-transparent font-black text-lg outline-none">
+                                </div>
+                                <div class="bg-slate-50 p-3 rounded-2xl border">
+                                    <label class="text-[9px] font-black text-slate-400 uppercase block mb-1">Maks. Ders</label>
+                                    <input type="number" id="ogMax" value="30" class="w-full bg-transparent font-black text-lg outline-none">
+                                </div>
+                            </div>
+                            <button onclick="toggleMazPanel()" class="w-full bg-rose-50 text-rose-700 p-4 rounded-2xl font-black text-[10px] border border-rose-100 uppercase hover:bg-rose-100 transition">📅 MAZERET SEÇİMİ YAP</button>
+                            <div id="mazPanel" class="hidden bg-slate-50 p-4 rounded-2xl border animate-in fade-in duration-300">
+                                <div class="grid grid-cols-6 gap-2" id="setupMazGrid"></div>
+                            </div>
+                            <button onclick="ekleO()" class="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black text-[12px] shadow-xl shadow-indigo-100 hover:scale-[1.02] transition-transform uppercase">SİSTEME KAYDET</button>
+                        </div>
+                        <div id="listO" class="grid grid-cols-1 gap-3 overflow-y-auto max-h-[600px] pr-2"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="t-analiz" class="tab-content">
+            <div class="flex justify-between items-center mb-8 bg-slate-900 p-6 rounded-[2rem] shadow-2xl">
+                <div>
+                    <h2 class="text-white font-black text-lg uppercase italic leading-none">Otomatik Dağıtım Motoru</h2>
+                    <p class="text-indigo-300 text-[10px] font-bold mt-1 uppercase">Mazeret ve Blok öncelikli algoritma</p>
+                </div>
+                <button onclick="dagitimOnayli()" class="bg-indigo-500 text-white px-12 py-4 rounded-2xl font-black text-[12px] uppercase shadow-lg hover:bg-indigo-400 transition transform hover:scale-105">PROGRAMI OLUŞTUR</button>
+            </div>
+            <div id="renderZone" class="grid grid-cols-1 lg:grid-cols-2 gap-10"></div>
+        </div>
+
+        <div id="t-ogretmen" class="tab-content grid grid-cols-1 lg:grid-cols-2 gap-10"></div>
+    </div>
+
+    <script>
+        let zumreler = [], ogretmenler = [], siniflar = [], program = [];
+        const gunler = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma"];
+        let tempMazeretler = [], draggedItem = null;
+
+        function tabAc(id, btn) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            btn.classList.add('active');
+            if(id === 't-analiz') renderAnaliz();
+            if(id === 't-ogretmen') renderOgretmenProgrami();
+        }
+
+        // --- VERİ EKLEME ---
+        function ekleZ() {
+            const ad = document.getElementById('zmAd').value.trim().toUpperCase();
+            const ds = document.getElementById('zmDs').value.split(',').map(x=>x.trim().toUpperCase());
+            if(ad && ds[0]) { zumreler.push({id:Date.now(), ad, dersler:ds}); ui(); }
+        }
+        function ekleS() {
+            const ad = document.getElementById('snAd').value.trim().toUpperCase();
+            const ds = document.getElementById('snDs').value.split(',').map(x=>({ders:x.split(':')[0].trim().toUpperCase(), saat:parseInt(x.split(':')[1])}));
+            if(ad && ds[0].saat) { siniflar.push({id:Date.now(), ad, yuk:ds}); ui(); }
+        }
+        function ekleO() {
+            const ad = document.getElementById('ogAd').value.trim().toUpperCase();
+            const zm = document.getElementById('ogZm').value;
+            if(ad && zm) {
+                ogretmenler.push({
+                    id:Date.now(), ad, zumre:zm, 
+                    blok: document.getElementById('ogBlok').value,
+                    max:parseInt(document.getElementById('ogMax').value), 
+                    maas:parseInt(document.getElementById('ogMaas').value), 
+                    mazeretler:[...tempMazeretler]
+                });
+                tempMazeretler = []; document.getElementById('ogAd').value = ""; initSetupMaz(); ui();
+            }
+        }
+
+        // --- MAZERET PANELİ ---
+        function toggleMazPanel() { document.getElementById('mazPanel').classList.toggle('hidden'); }
+        function initSetupMaz() {
+            const grid = document.getElementById('setupMazGrid');
+            grid.innerHTML = '<div></div>' + gunler.map(g => `<div class="text-[8px] font-black text-center text-slate-400 uppercase">${g.slice(0,3)}</div>`).join('');
+            for(let st=1; st<=8; st++) {
+                grid.innerHTML += `<div class="text-[10px] font-black text-slate-300 flex items-center justify-center">${st}</div>`;
+                for(let g=0; g<5; g++) {
+                    grid.innerHTML += `<div onclick="toggleTempMaz('${gunler[g]} ${st}', this)" class="m-box bg-white"></div>`;
+                }
+            }
+        }
+        function toggleTempMaz(key, el) {
+            const idx = tempMazeretler.indexOf(key);
+            if(idx > -1) { tempMazeretler.splice(idx,1); el.classList.remove('active'); }
+            else { tempMazeretler.push(key); el.classList.add('active'); }
+        }
+        initSetupMaz();
+
+        function ui() {
+            document.getElementById('listZ').innerHTML = zumreler.map(z => `<div class="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl relative group"><div class="text-[10px] font-black uppercase text-indigo-700">${z.ad}</div><div class="text-[9px] text-indigo-400 font-bold">${z.dersler.join(', ')}</div></div>`).join('');
+            document.getElementById('listS').innerHTML = siniflar.map(s => `<div class="p-4 bg-amber-50 border border-amber-100 rounded-2xl relative group"><div class="text-[10px] font-black uppercase text-amber-700">${s.ad}</div><div class="text-[9px] text-amber-400 font-bold">${s.yuk.map(y=>`${y.ders}:${y.saat}`).join('|')}</div></div>`).join('');
+            document.getElementById('listO').innerHTML = ogretmenler.map(o => `
+                <div class="p-4 bg-white border border-slate-100 rounded-2xl shadow-sm relative group">
+                    <div class="flex justify-between">
+                        <div class="text-[11px] font-black uppercase">${o.ad} <span class="text-indigo-500">(${o.zumre})</span></div>
+                        <span class="text-[8px] px-2 py-1 bg-indigo-100 text-indigo-700 rounded-lg font-black">${o.blok}</span>
+                    </div>
+                    <div class="text-[9px] text-slate-400 font-bold mt-1">Maaş: ${o.maas} | Max: ${o.max} | Mazeret: ${o.mazeretler.length} Saat</div>
+                </div>`).join('');
+            document.getElementById('ogZm').innerHTML = '<option value="">Zümre Seç</option>' + zumreler.map(z=>`<option value="${z.ad}">${z.ad}</option>`).join('');
+        }
+
+        // --- DAĞITIM ALGORİTMASI ---
+        function dagitimOnayli() {
+            const mazIzin = confirm("Mazeretli saatlere ders yerleştirilsin mi?\n\n'Tamam' derseniz mazeretleri yok sayar, 'İptal' derseniz mazeretli saatleri boş bırakır.");
+            otomatikDagıt(mazIzin);
+        }
+
+        function otomatikDagıt(mazIzin) {
+            program = [];
+            let sortedSiniflar = [...siniflar].sort(() => Math.random() - 0.5);
+
+            sortedSiniflar.forEach(snf => {
+                snf.yuk.forEach(yk => {
+                    const zm = zumreler.find(z => z.dersler.includes(yk.ders));
+                    if(!zm) return;
+                    let hocalar = ogretmenler.filter(o => o.zumre === zm.ad).sort(() => Math.random() - 0.5);
+                    let kalan = yk.saat;
+
+                    for(let g=0; g<5 && kalan > 0; g++) {
+                        for(let st=1; st<=8 && kalan > 0; st++) {
+                            let hoca = hocalar.find(h => {
+                                const hDolu = program.some(p => p.hId === h.id && p.g === gunler[g] && p.s === st);
+                                const sDolu = program.some(p => p.sn === snf.ad && p.g === gunler[g] && p.s === st);
+                                const isMaz = h.mazeretler.includes(`${gunler[g]} ${st}`);
+                                if (hDolu || sDolu) return false;
+                                if (!mazIzin && isMaz) return false;
+                                return true;
+                            });
+
+                            if(hoca) {
+                                // BLOK KONTROLÜ
+                                let yerlesebilir = 1;
+                                if (hoca.blok === "BLOK" && kalan >= 2 && st < 8) {
+                                    const nextHDolu = program.some(p => p.hId === hoca.id && p.g === gunler[g] && p.s === st+1);
+                                    const nextSDolu = program.some(p => p.sn === snf.ad && p.g === gunler[g] && p.s === st+1);
+                                    if (!nextHDolu && !nextSDolu) yerlesebilir = 2;
+                                }
+
+                                for(let i=0; i<yerlesebilir; i++) {
+                                    program.push({sn: snf.ad, g: gunler[g], s: st+i, ders: yk.ders, hAd: hoca.ad, hId: hoca.id});
+                                    kalan--;
+                                }
+                                if(yerlesebilir === 2) st++;
+                            }
+                        }
+                    }
+                });
+            });
+            renderAnaliz();
+        }
+
+        // --- DRAG & DROP SWAP ---
+        function onDragStart(e, sn, g, st) { draggedItem = program.find(p => p.sn === sn && p.g === g && p.s === st); }
+        function onDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('drag-over'); }
+        function onDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+        function onDrop(e, sn, g, st) {
+            e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+            if(!draggedItem) return;
+            const target = program.find(p => p.sn === sn && p.g === g && p.s === st);
+            const oldG = draggedItem.g, oldS = draggedItem.s, oldSN = draggedItem.sn;
+            if (target) { target.g = oldG; target.s = oldS; target.sn = oldSN; }
+            draggedItem.g = g; draggedItem.s = st; draggedItem.sn = sn;
+            renderAnaliz();
+        }
+
+        // --- MANUEL MÜDAHALE ---
+        let activeCell = null;
+        function openManual(sn, g, st) {
+            activeCell = { sn, g, st };
+            document.getElementById('modalInfo').innerText = `${sn} | ${g} | ${st}. SAAT`;
+            const sVeri = siniflar.find(x => x.ad === sn);
+            document.getElementById('mDers').innerHTML = '<option value="">Ders Seçin</option>' + (sVeri ? sVeri.yuk.map(y => `<option value="${y.ders}">${y.ders}</option>`).join('') : '');
+            document.getElementById('mHoca').innerHTML = '<option value="">Önce Ders Seçin</option>';
+            document.getElementById('manualModal').style.display = 'flex';
+        }
+        function updateHocaList() {
+            const ders = document.getElementById('mDers').value;
+            const zm = zumreler.find(z => z.dersler.includes(ders));
+            if (!zm) return;
+            document.getElementById('mHoca').innerHTML = ogretmenler.filter(o => o.zumre === zm.ad).map(h => `<option value="${h.id}">${h.ad}</option>`).join('');
+        }
+        function saveManualEntry() {
+            const hId = document.getElementById('mHoca').value, ders = document.getElementById('mDers').value;
+            if(!hId || !ders) return;
+            const h = ogretmenler.find(o => o.id == hId);
+            program = program.filter(p => !(p.sn === activeCell.sn && p.g === activeCell.g && p.s === activeCell.st));
+            program.push({sn: activeCell.sn, g: activeCell.g, s: activeCell.st, ders, hAd: h.ad, hId: h.id});
+            closeModal(); renderAnaliz();
+        }
+        function closeModal() { document.getElementById('manualModal').style.display = 'none'; }
+        function silHucre(sn, g, st, e) {
+            e.stopPropagation();
+            program = program.filter(p => !(p.sn === sn && p.g === g && p.s === st));
+            renderAnaliz();
+        }
+
+        // --- RENDER ---
+        function renderAnaliz() {
+            let html = "";
+            siniflar.sort((a,b)=>a.ad.localeCompare(b.ad)).forEach(s => {
+                html += `<div class="card border-t-4 border-indigo-600">
+                    <h4 class="font-black text-[12px] mb-4 uppercase italic text-slate-700">${s.ad} SINIFI</h4>
+                    <div class="grid grid-cols-6 gap-1">
+                        <div></div>${gunler.map(g=>`<div class="text-[9px] font-black text-center border-b pb-2 uppercase text-slate-400">${g.slice(0,3)}</div>`).join('')}
+                        ${Array.from({length:8}, (_,i)=>i+1).map(st => `
+                            <div class="text-[10px] font-black text-center flex items-center justify-center bg-slate-50 rounded-lg text-slate-400">${st}</div>
+                            ${gunler.map(g => {
+                                const d = program.find(p=>p.sn===s.ad && p.g===g && p.s===st);
+                                return `<div class="hour-cell" draggable="${d?'true':'false'}" ondragstart="onDragStart(event, '${s.ad}', '${g}', ${st})" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event, '${s.ad}', '${g}', ${st})" onclick="openManual('${s.ad}', '${g}', ${st})">
+                                    ${d ? `<div onclick="silHucre('${s.ad}','${g}',${st}, event)" class="delete-btn">✕</div>` : ''}
+                                    <span class="font-black text-[10px] uppercase">${d?d.ders:'-'}</span>
+                                    <span class="text-[8px] text-indigo-500 font-bold mt-1">${d?d.hAd:''}</span>
+                                </div>`;
+                            }).join('')}
+                        `).join('')}
+                    </div>
+                </div>`;
+            });
+            document.getElementById('renderZone').innerHTML = html;
+        }
+
+        function renderOgretmenProgrami() {
+            let html = "";
+            ogretmenler.forEach(o => {
+                const oProg = program.filter(p=>p.hId===o.id);
+                html += `<div class="card border-t-4 border-emerald-500">
+                    <div class="flex justify-between items-start mb-4"><h4 class="font-black text-[12px] uppercase text-slate-800">${o.ad}</h4><div class="text-[9px] font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full uppercase">EK DERS: ${Math.max(0, oProg.length - o.maas)}</div></div>
+                    <div class="grid grid-cols-6 gap-1">
+                        <div></div>${gunler.map(g=>`<div class="text-[8px] font-black text-center uppercase text-slate-400">${g.slice(0,3)}</div>`).join('')}
+                        ${Array.from({length:8}, (_,i)=>i+1).map(st => `
+                            <div class="text-[10px] font-black text-center border bg-slate-50 flex items-center justify-center text-slate-400 rounded-lg">${st}</div>
+                            ${gunler.map(g => {
+                                const d = oProg.find(p=>p.g===g && p.s===st);
+                                const isM = o.mazeretler.includes(`${g} ${st}`);
+                                return `<div class="hour-cell ${d?'bg-emerald-50 border-emerald-100':''} ${isM?'bg-rose-50 border-rose-100':''}">
+                                    <span class="font-black text-[10px] uppercase">${d?d.ders:(isM?'MAZ':'')}</span>
+                                    <span class="text-[8px] text-emerald-700 font-bold">${d?d.sn:''}</span>
+                                </div>`;
+                            }).join('')}
+                        `).join('')}
+                    </div>
+                </div>`;
+            });
+            document.getElementById('t-ogretmen').innerHTML = html;
+        }
+
+        // --- EXCEL V3 FORMAT ÇIKTISI ---
+        function v3FormatExcelAl() {
+            const wb = XLSX.utils.book_new();
+            
+            // 1. SINIF PROGRAMLARI (V3 ÖRNEĞİNE BİREBİR UYGUN)
+            let snRows = [["SINIF HAFTALIK DERS PROGRAMLARI"]];
+            siniflar.sort((a,b)=>a.ad.localeCompare(b.ad)).forEach(s => {
+                snRows.push([s.ad + " SINIFI"]);
+                snRows.push(["SAAT", ...gunler]);
+                for(let st=1; st<=8; st++) {
+                    let r = [st];
+                    gunler.forEach(g => {
+                        const d = program.find(p=>p.sn===s.ad && p.g===g && p.s===st);
+                        r.push(d ? `${d.ders} (${d.hAd})` : "-");
+                    });
+                    snRows.push(r);
+                }
+                snRows.push([], []); // Sınıflar arası boşluklar
+            });
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(snRows), "Sınıf Programları");
+
+            // 2. ÖĞRETMEN PROGRAMLARI (V3 ÖRNEĞİNE BİREBİR UYGUN)
+            let ogRows = [["ÖĞRETMEN HAFTALIK DERS PROGRAMLARI"]];
+            ogretmenler.forEach(o => {
+                const oProg = program.filter(p=>p.hId===o.id);
+                ogRows.push([`${o.ad} (${o.zumre})`]);
+                ogRows.push(["SAAT", ...gunler]);
+                for(let st=1; st<=8; st++) {
+                    let r = [st];
+                    gunler.forEach(g => {
+                        const d = oProg.find(p=>p.g===g && p.s===st);
+                        const isM = o.mazeretler.includes(`${g} ${st}`);
+                        r.push(d ? `${d.sn} - ${d.ders}` : (isM ? "MAZERET" : "-"));
+                    });
+                    ogRows.push(r);
+                }
+                ogRows.push([], []); // Öğretmenler arası boşluklar
+            });
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ogRows), "Öğretmen Programları");
+
+            XLSX.writeFile(wb, "Riza_Karaman_V3_Program.xlsx");
+        }
+
+        function sistemiYedekle() {
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(zumreler.map(z=>({Zümre:z.ad, Dersler:z.dersler.join(',')}))), "Zümreler");
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ogretmenler.map(o=>({Ad:o.ad, Zümre:o.zumre, Maks:o.max, Maaş:o.maas, Blok:o.blok, Mazeret:o.mazeretler.join(',')}))), "Öğretmenler");
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(siniflar.map(s=>({Sınıf:s.ad, Ders_Data:s.yuk.map(y=>`${y.ders}:${y.saat}`).join(',')}))), "Sınıflar");
+            XLSX.writeFile(wb, "V35_Full_Yedek.xlsx");
+        }
+
+        function excelYukle(e) {
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                const wb = XLSX.read(new Uint8Array(evt.target.result), {type: 'array'});
+                if(wb.Sheets["Zümreler"]) zumreler = XLSX.utils.sheet_to_json(wb.Sheets["Zümreler"]).map(z => ({ id: Date.now()+Math.random(), ad: String(z.Zümre||"").toUpperCase(), dersler: String(z.Dersler||"").split(',').map(d=>d.trim().toUpperCase()) }));
+                if(wb.Sheets["Öğretmenler"]) ogretmenler = XLSX.utils.sheet_to_json(wb.Sheets["Öğretmenler"]).map(o => ({ id: Date.now()+Math.random(), ad: String(o.Ad||"").toUpperCase(), zumre: String(o.Zümre||"").toUpperCase(), blok: String(o.Blok||"BLOK"), max: parseInt(o.Maks||30), maas: parseInt(o.Maaş||15), mazeretler: o.Mazeret ? String(o.Mazeret).split(',').filter(m=>m).map(m=>m.trim()) : [] }));
+                if(wb.Sheets["Sınıflar"]) siniflar = XLSX.utils.sheet_to_json(wb.Sheets["Sınıflar"]).map(s => ({ id: Date.now()+Math.random(), ad: String(s.Sınıf||"").toUpperCase(), yuk: String(s.Ders_Data||"").split(',').map(item => ({ ders: item.split(':')[0].trim().toUpperCase(), saat: parseInt(item.split(':')[1]) })) }));
+                ui(); alert("Veriler başarıyla yüklendi!");
+            };
+            reader.readAsArrayBuffer(e.target.files[0]);
+        }
+    </script>
+</body>
+</html>
